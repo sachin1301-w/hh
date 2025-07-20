@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Bank Account Simulation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: sans-serif; background: #f4f4f4; transition: 0.3s; }
+    body.dark { background: #121212; color: #f1f1f1; }
+    .container { display: flex; flex-wrap: wrap; justify-content: center; padding: 20px; }
+    .box { background: white; padding: 20px; border-radius: 10px; margin: 10px; width: 320px; box-shadow: 0 0 10px rgba(0,0,0,0.2); }
+    body.dark .box { background: #1f1f1f; color: #fff; }
+    input, button, select { width: 100%; padding: 10px; margin: 8px 0; font-size: 1rem; border-radius: 5px; border: 1px solid #ccc; }
+    button { background: #4CAF50; color: white; border: none; cursor: pointer; }
+    button:hover { background: #388e3c; }
+    header { background: #333; color: white; padding: 15px; text-align: center; }
+    header button { float: right; background: #555; margin-left: 10px; }
+    ul { padding-left: 20px; max-height: 150px; overflow-y: auto; }
+    @media (max-width: 768px) {
+      .container { flex-direction: column; align-items: center; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <span id="headerTitle">Bank Simulator</span>
+    <button onclick="toggleDarkMode()">🌙</button>
+    <button onclick="logout()">Logout</button>
+  </header>
+
+  <div class="container" id="authSection">
+    <div class="box">
+      <h3>Create Account</h3>
+      <input id="regName" placeholder="Your Name" />
+      <input id="regPass" type="password" placeholder="Set Password" />
+      <input id="regBal" type="number" placeholder="Initial Balance" />
+      <button onclick="register()">Register</button>
+    </div>
+    <div class="box">
+      <h3>Login</h3>
+      <input id="loginName" placeholder="Your Name" />
+      <input id="loginPass" type="password" placeholder="Password" />
+      <button onclick="login()">Login</button>
+    </div>
+  </div>
+
+  <div class="container" id="dashboard" style="display:none;">
+    <div class="box">
+      <h3>Welcome <span id="userName"></span></h3>
+      <p>Balance: ₹<span id="userBalance"></span></p>
+      <input id="amount" type="number" placeholder="Enter Amount" />
+      <button onclick="deposit()">Deposit</button>
+      <button onclick="withdraw()">Withdraw</button>
+    </div>
+
+    <div class="box">
+      <h3>Transaction History</h3>
+      <select id="filter" onchange="renderHistory()">
+        <option value="all">All</option>
+        <option value="deposit">Deposits</option>
+        <option value="withdraw">Withdrawals</option>
+      </select>
+      <ul id="historyList"></ul>
+      <button onclick="exportCSV()">Export CSV</button>
+    </div>
+
+    <div class="box">
+      <h3>Change Password</h3>
+      <input id="oldPass" type="password" placeholder="Old Password" />
+      <input id="newPass" type="password" placeholder="New Password" />
+      <button onclick="changePassword()">Change Password</button>
+    </div>
+
+    <div class="box">
+      <h3>Interest Calculator</h3>
+      <input id="rate" type="number" placeholder="Rate (%)" />
+      <input id="years" type="number" placeholder="Years" />
+      <button onclick="calculateInterest()">Calculate</button>
+      <p id="interestResult"></p>
+    </div>
+  </div>
+
+  <script>
+    let users = JSON.parse(localStorage.getItem("users")) || {};
+    let currentUser = localStorage.getItem("currentUser");
+
+    function saveUsers() {
+      localStorage.setItem("users", JSON.stringify(users));
+    }
+
+    function register() {
+      let name = regName.value.trim();
+      let pass = regPass.value;
+      let bal = parseFloat(regBal.value);
+      if (!name || !pass || isNaN(bal) || bal < 0) return alert("Fill all fields correctly.");
+      if (users[name]) return alert("User already exists.");
+      users[name] = { password: pass, balance: bal, history: [] };
+      saveUsers();
+      alert("Account created. Please login.");
+    }
+
+    function login() {
+      let name = loginName.value.trim();
+      let pass = loginPass.value;
+      if (!users[name]) return alert("User not found.");
+      if (users[name].password !== pass) return alert("Wrong password.");
+      currentUser = name;
+      localStorage.setItem("currentUser", name);
+      showDashboard();
+    }
+
+    function logout() {
+      currentUser = null;
+      localStorage.removeItem("currentUser");
+      location.reload();
+    }
+
+    function showDashboard() {
+      if (!currentUser || !users[currentUser]) return;
+      authSection.style.display = "none";
+      dashboard.style.display = "flex";
+      userName.textContent = currentUser;
+      updateBalance();
+      renderHistory();
+    }
+
+    function updateBalance() {
+      userBalance.textContent = users[currentUser].balance.toFixed(2);
+    }
+
+    function deposit() {
+      let amt = parseFloat(amount.value);
+      if (isNaN(amt) || amt <= 0) return alert("Enter valid amount.");
+      users[currentUser].balance += amt;
+      users[currentUser].history.push({ type: "deposit", amount: amt, time: new Date().toLocaleString() });
+      saveUsers();
+      updateBalance();
+      renderHistory();
+    }
+
+    function withdraw() {
+      let amt = parseFloat(amount.value);
+      if (isNaN(amt) || amt <= 0) return alert("Enter valid amount.");
+      if (amt > users[currentUser].balance) return alert("Insufficient balance.");
+      users[currentUser].balance -= amt;
+      users[currentUser].history.push({ type: "withdraw", amount: amt, time: new Date().toLocaleString() });
+      saveUsers();
+      updateBalance();
+      renderHistory();
+    }
+
+    function renderHistory() {
+      let filter = document.getElementById("filter").value;
+      let list = document.getElementById("historyList");
+      list.innerHTML = "";
+      (users[currentUser].history || [])
+        .filter(tx => filter === "all" || tx.type === filter)
+        .forEach(tx => {
+          let li = document.createElement("li");
+          li.textContent = `${tx.time} - ${tx.type.toUpperCase()}: ₹${tx.amount}`;
+          list.appendChild(li);
+        });
+    }
+
+    function exportCSV() {
+      let csv = "Time,Type,Amount\\n";
+      users[currentUser].history.forEach(tx => {
+        csv += `${tx.time},${tx.type},${tx.amount}\\n`;
+      });
+      let blob = new Blob([csv], { type: "text/csv" });
+      let a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = currentUser + "_transactions.csv";
+      a.click();
+    }
+
+    function changePassword() {
+      if (oldPass.value !== users[currentUser].password) return alert("Incorrect old password.");
+      if (!newPass.value) return alert("Enter new password.");
+      users[currentUser].password = newPass.value;
+      saveUsers();
+      alert("Password changed.");
+    }
+
+    function calculateInterest() {
+      let r = parseFloat(rate.value);
+      let y = parseFloat(years.value);
+      if (isNaN(r) || isNaN(y)) return alert("Enter valid values.");
+      let si = users[currentUser].balance * r * y / 100;
+      interestResult.textContent = `Interest in ${y} years: ₹${si.toFixed(2)}`;
+    }
+
+    function toggleDarkMode() {
+      document.body.classList.toggle("dark");
+      localStorage.setItem("theme", document.body.classList.contains("dark") ? "dark" : "light");
+    }
+
+    if (localStorage.getItem("theme") === "dark") document.body.classList.add("dark");
+    if (currentUser && users[currentUser]) showDashboard();
+  </script>
+</body>
+</html>
